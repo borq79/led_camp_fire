@@ -7,7 +7,7 @@
 #define SPARKS_LED_PWM_PIN 6
 #define NUM_OF_PIXELS      12
 #define SECTIONS           4
-#define RAIL_MAX           10
+#define RAIL_MAX           5
 #define COMM_SPEED         115200
 #define TIME_QUANTA        10
 #define MAX_DURATION_STEP  500
@@ -62,6 +62,10 @@ void initHeatState(int i) {
   heatSlides[i].durationElapsed = 0;
 }
 
+int sparkFlare = 0;
+int sparkFlareDuration = 0;
+int sparkFlareElapsed = 0;
+
 void setup() {
   Serial.begin(COMM_SPEED);
 
@@ -84,9 +88,14 @@ void setup() {
   for(int i = 0; i < SECTIONS; i++) {
     initHeatState(i);
   }
+
+  sparkFlareElapsed = 0;
+  sparkFlareDuration = random(1000, 5000);
+  sparkFlare = random(64, 255);
+  analogWrite(SPARKS_LED_PWM_PIN, sparkFlare);
 }
 
-int offsetCounter = 0;
+
 
 void loop() {
   // Reset any items that need to be reset
@@ -96,10 +105,10 @@ void loop() {
     if (heatSlides[i].durationElapsed > durationExpected) {
       initHeatState(i);
     } else if (heatSlides[i].durationElapsed % heatSlides[i].durationAtEachStep == 0){
-      int pixelIndex = i * numberPerSection; Serial.print("Pixel base: "); Serial.println(pixelIndex);
+      int pixelIndex = i * numberPerSection; //Serial.print("Pixel base: "); Serial.println(pixelIndex);
       COLOR c = rail[heatSlides[i].railIndex++];
       for(int j = 0; j < numberPerSection; j++, pixelIndex++) {
-          Serial.println(pixelIndex); Serial.print("COLOR: "); Serial.print(i); Serial.print(" : " ); Serial.print(c.r); Serial.print(" : "); Serial.print(c.g); Serial.print(" : "); Serial.println(c.b);
+          //Serial.println(pixelIndex); Serial.print("COLOR: "); Serial.print(i); Serial.print(" : " ); Serial.print(c.r); Serial.print(" : "); Serial.print(c.g); Serial.print(" : "); Serial.println(c.b);
           strip.setPixelColor(pixelIndex, c.r, c.g, c.b);
       }
     } else {
@@ -108,5 +117,16 @@ void loop() {
   }
 
   strip.show();
+
+  if (sparkFlareElapsed > sparkFlareDuration) {
+    sparkFlareElapsed = 0;
+    sparkFlareDuration = random(100, 1500);
+    sparkFlare = random(0, 255);
+    analogWrite(SPARKS_LED_PWM_PIN, sparkFlare);
+    //Serial.print("SPARK: "); Serial.println(sparkFlare);
+  } else {
+    sparkFlareElapsed += TIME_QUANTA;
+  }
+  
   delay(TIME_QUANTA);
 }
