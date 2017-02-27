@@ -8,6 +8,9 @@
 #define NUM_OF_PIXELS      12
 #define SECTIONS           4
 #define RAIL_MAX           10
+#define COMM_SPEED         115200
+#define TIME_QUANTA        10
+#define MAX_DURATION_STEP  500
 
 struct COLOR {
   byte r;
@@ -27,7 +30,15 @@ COLOR rail[] = {  {0xFF, 0x00, 0x00},
                   {0xFF, 0xFF, 0xFF} };
 
 const int numberPerSection = NUM_OF_PIXELS / SECTIONS;
-int offsets[SECTIONS];
+
+struct HEAT_SLIDE_PER_SECTION {
+  byte railIndex;
+  byte railMax;
+  long durationAtEachStep;
+  long durationElapsed;
+};
+HEAT_SLIDE_PER_SECTION heatSlides[SECTIONS];
+
 
 // Parameter 1 = number of pixels in strip
 // Parameter 2 = Arduino pin number (most are valid)
@@ -44,7 +55,16 @@ Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_OF_PIXELS, EMBERS_WS2812B_PIN, N
 // and minimize distance between Arduino and first pixel.  Avoid connecting
 // on a live circuit...if you must, connect GND first.
 
+void initHeatState(int i) {
+  heatSlides[i].railIndex  = 0;
+  heatSlides[i].railMax = random(0, RAIL_MAX - 1);
+  heatSlides[i].durationAtEachStep = random(TIME_QUANTA, MAX_DURATION_STEP);
+  heatSlides[i].durationElapsed = 0;
+}
+
 void setup() {
+  Serial.begin(COMM_SPEED);
+
   // This is for Trinket 5V 16MHz, you can remove these three lines if you are not using a Trinket
   #if defined (__AVR_ATtiny85__)
     if (F_CPU == 16000000) clock_prescale_set(clock_div_1);
@@ -52,156 +72,41 @@ void setup() {
 
   // Clear out the pixel array
   strip.begin();
+  for(int i = 0; i < NUM_OF_PIXELS; i++) {
+    strip.setPixelColor(i, 0xFF, 0x00, 0x00);
+  }
   strip.show();
+
 
   pinMode(SPARKS_LED_PWM_PIN, OUTPUT);
   randomSeed(analogRead(0));
 
   for(int i = 0; i < SECTIONS; i++) {
-    offsets[i] = random(0, RAIL_MAX - 1);
+    initHeatState(i);
   }
-
-  Serial.begin(115200);
 }
 
 int offsetCounter = 0;
 
 void loop() {
-
-  int pixelIndex = 0;
-
+  // Reset any items that need to be reset
   for(int i = 0; i < SECTIONS; i++) {
+    int durationExpected = (heatSlides[i].railMax - heatSlides[i].railIndex) * heatSlides[i].durationAtEachStep;
 
-    offsets[i]++;
-    if (offsets[i] > RAIL_MAX - 1) {
-      offsets[i] = 0;
+    if (heatSlides[i].durationElapsed > durationExpected) {
+      initHeatState(i);
+    } else if (heatSlides[i].durationElapsed % heatSlides[i].durationAtEachStep == 0){
+      int pixelIndex = i * numberPerSection; Serial.print("Pixel base: "); Serial.println(pixelIndex);
+      COLOR c = rail[heatSlides[i].railIndex++];
+      for(int j = 0; j < numberPerSection; j++, pixelIndex++) {
+          Serial.println(pixelIndex); Serial.print("COLOR: "); Serial.print(i); Serial.print(" : " ); Serial.print(c.r); Serial.print(" : "); Serial.print(c.g); Serial.print(" : "); Serial.println(c.b);
+          strip.setPixelColor(pixelIndex, c.r, c.g, c.b);
+      }
+    } else {
+      heatSlides[i].durationElapsed += TIME_QUANTA;
     }
-    Serial.print("Row: "); Serial.print(offsets[i]); + Serial.print(" : "); Serial.println(i);
-
-    for(int j = 0; j < numberPerSection; j++) {
-        COLOR c = rail[offsets[i]];
-        Serial.println(pixelIndex); Serial.print("COLOR: "); Serial.print(i); Serial.print(" : " ); Serial.print(c.r); Serial.print(" : "); Serial.print(c.g); Serial.print(" : "); Serial.println(c.b);
-        strip.setPixelColor(pixelIndex++, c.r, c.g, c.b);
-    }
-
   }
 
   strip.show();
-
-
-//   strip.setPixelColor(0, 0xFe, 0x58, 0x0C);
-//   strip.setPixelColor(1, 0xFF, 0x2C, 0x0C);
-//   strip.setPixelColor(2, 0xFF, 0x45, 0x00);
-//   strip.setPixelColor(3, 0xFe, 0x58, 0x0C);
-//   strip.setPixelColor(4, 0xFF, 0x2C, 0x0C);
-//   strip.setPixelColor(5, 0xFF, 0x45, 0x00);
-//   strip.setPixelColor(6, 0xFe, 0x58, 0x0C);
-//   strip.setPixelColor(7, 0xFF, 0x2C, 0x0C);
-//   strip.setPixelColor(8, 0xFF, 0x45, 0x00);
-//   strip.setPixelColor(9, 0xFe, 0x58, 0x0C);
-//   strip.setPixelColor(10, 0xFF, 0x2C, 0x0C);
-//   strip.setPixelColor(11, 0xFF, 0x45, 0x00);
-// // }
-// strip.show();
-
-  delay(100);
-
-//   // Some example procedures showing how to display to the pixels:
-//   colorWipe(strip.Color(255, 0, 0), 50); // Red
-//   colorWipe(strip.Color(0, 255, 0), 50); // Green
-//   colorWipe(strip.Color(0, 0, 255), 50); // Blue
-// //colorWipe(strip.Color(0, 0, 0, 255), 50); // White RGBW
-//   // Send a theater pixel chase in...
-//   theaterChase(strip.Color(127, 127, 127), 50); // White
-//   theaterChase(strip.Color(127, 0, 0), 50); // Red
-//   theaterChase(strip.Color(0, 0, 127), 50); // Blue
-//
-//   rainbow(20);
-//   rainbowCycle(20);
-//   theaterChaseRainbow(50);
-}
-
-// Fill the dots one after the other with a color
-void colorWipe(uint32_t c, uint8_t wait) {
-  for(uint16_t i=0; i<strip.numPixels(); i++) {
-    strip.setPixelColor(i, c);
-    strip.show();
-    delay(wait);
-  }
-}
-
-void rainbow(uint8_t wait) {
-  uint16_t i, j;
-
-  for(j=0; j<256; j++) {
-    for(i=0; i<strip.numPixels(); i++) {
-      strip.setPixelColor(i, Wheel((i+j) & 255));
-    }
-    strip.show();
-    delay(wait);
-  }
-}
-
-// Slightly different, this makes the rainbow equally distributed throughout
-void rainbowCycle(uint8_t wait) {
-  uint16_t i, j;
-
-  for(j=0; j<256*5; j++) { // 5 cycles of all colors on wheel
-    for(i=0; i< strip.numPixels(); i++) {
-      strip.setPixelColor(i, Wheel(((i * 256 / strip.numPixels()) + j) & 255));
-    }
-    strip.show();
-    delay(wait);
-  }
-}
-
-//Theatre-style crawling lights.
-void theaterChase(uint32_t c, uint8_t wait) {
-  for (int j=0; j<10; j++) {  //do 10 cycles of chasing
-    for (int q=0; q < 3; q++) {
-      for (uint16_t i=0; i < strip.numPixels(); i=i+3) {
-        strip.setPixelColor(i+q, c);    //turn every third pixel on
-      }
-      strip.show();
-
-      delay(wait);
-
-      for (uint16_t i=0; i < strip.numPixels(); i=i+3) {
-        strip.setPixelColor(i+q, 0);        //turn every third pixel off
-      }
-    }
-  }
-}
-
-//Theatre-style crawling lights with rainbow effect
-void theaterChaseRainbow(uint8_t wait) {
-  for (int j=0; j < 256; j++) {     // cycle all 256 colors in the wheel
-    for (int q=0; q < 3; q++) {
-      for (uint16_t i=0; i < strip.numPixels(); i=i+3) {
-        strip.setPixelColor(i+q, Wheel( (i+j) % 255));    //turn every third pixel on
-      }
-      strip.show();
-
-      delay(wait);
-
-      for (uint16_t i=0; i < strip.numPixels(); i=i+3) {
-        strip.setPixelColor(i+q, 0);        //turn every third pixel off
-      }
-    }
-  }
-}
-
-// Input a value 0 to 255 to get a color value.
-// The colours are a transition r - g - b - back to r.
-uint32_t Wheel(byte WheelPos) {
-  WheelPos = 255 - WheelPos;
-  if(WheelPos < 85) {
-    return strip.Color(255 - WheelPos * 3, 0, WheelPos * 3);
-  }
-  if(WheelPos < 170) {
-    WheelPos -= 85;
-    return strip.Color(0, WheelPos * 3, 255 - WheelPos * 3);
-  }
-  WheelPos -= 170;
-  return strip.Color(WheelPos * 3, 255 - WheelPos * 3, 0);
+  delay(TIME_QUANTA);
 }
