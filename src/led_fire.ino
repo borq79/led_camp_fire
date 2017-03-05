@@ -5,7 +5,7 @@
 
 #define EMBERS_WS2812B_PIN 5
 #define SPARKS_LED_PWM_PIN 6
-#define NUM_OF_PIXELS      12
+#define NUM_OF_PIXELS      25
 #define SECTIONS           4
 #define RAIL_MAX           5
 #define COMM_SPEED         115200
